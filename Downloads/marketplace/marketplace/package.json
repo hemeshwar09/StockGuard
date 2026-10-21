@@ -1,0 +1,1 @@
+{ "name": "marketplace", "version": "1.0.0", "type": "module", "scripts": { "start": "node server.js", "test": "node test/smoke.mjs" }, "engines": { "node": ">=20" } }

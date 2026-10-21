@@ -1,0 +1,96 @@
+<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Bazaar · Marketplace</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--ink:#14181f;--mut:#667085;--line:#e4e7ec;--acc:#4f46e5;--ok:#12b76a;--warn:#f79009;--bad:#f04438;--bar:#eef0f4}
+@media(prefers-color-scheme:dark){:root{--bg:#0b0e14;--card:#131822;--ink:#e8edf5;--mut:#8b97a9;--line:#232c3c;--bar:#1b2434;--acc:#818cf8}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif}a{color:inherit;text-decoration:none}
+header{background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}.bar{max-width:1120px;margin:0 auto;padding:12px 16px;display:flex;gap:14px;align-items:center}
+.logo{font-weight:800;font-size:20px;color:var(--acc)}#q{flex:1;min-width:120px}nav{display:flex;gap:6px;align-items:center}nav a,nav button{padding:7px 12px;border-radius:9px;font-weight:600;color:var(--mut)}nav a:hover{color:var(--ink)}
+main{max-width:1120px;margin:0 auto;padding:20px 16px 60px}input,select,textarea,button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:9px 12px}
+button{cursor:pointer}.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}.pri:disabled{opacity:.5}.danger{color:var(--bad)}
+.layout{display:grid;grid-template-columns:210px 1fr;gap:20px}@media(max-width:800px){.layout{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px}
+.p{display:flex;flex-direction:column;gap:6px;transition:transform .15s}.p:hover{transform:translateY(-3px)}.img{height:130px;border-radius:10px;background:linear-gradient(135deg,var(--bar),var(--line));display:grid;place-items:center;font-size:56px}
+.price{font-size:18px;font-weight:800}.mut{color:var(--mut);font-size:13px}.chip{display:inline-block;padding:4px 10px;border-radius:99px;background:var(--bar);margin:2px;cursor:pointer;font-size:13px}.chip.on{background:var(--acc);color:#fff}
+.badge{font-size:12px;font-weight:700;padding:2px 9px;border-radius:99px;background:var(--bar)}.b-delivered,.b-approved{background:#12b76a22;color:var(--ok)}.b-shipped,.b-processing,.b-pending{background:#f7900922;color:var(--warn)}.b-cancelled,.b-suspended{background:#f0443822;color:var(--bad)}
+h1,h2{margin:0 0 12px}h2{font-size:17px}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.sp{margin-left:auto}.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:16px}
+.stat b{display:block;font-size:22px}table{width:100%;border-collapse:collapse}td,th{padding:9px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}th{font-size:12px;color:var(--mut);text-transform:uppercase}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:800px){.two{grid-template-columns:1fr}}.stack{display:grid;gap:14px}.star{color:#f5a623}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:10px;opacity:0;transition:.25s;pointer-events:none}#toast.on{opacity:1}
+</style>
+<header><div class=bar><a class=logo href="#/">🛍️ Bazaar</a><input id=q placeholder="Search products, shops…"><nav id=nav></nav></div></header><main id=app></main><div id=toast></div>
+<script>
+const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),money=c=>'$'+(c/100).toFixed(2);
+let token=localStorage.t||'',me=null,cartN=0,F={page:1},busy=0;
+async function api(p,o={}){const r=await fetch('/api'+p,{method:o.method||'GET',headers:{'content-type':'application/json',...(token?{authorization:'Bearer '+token}:{})},body:o.body?JSON.stringify(o.body):undefined});
+ const j=await r.json().catch(()=>({}));if(!r.ok){if(r.status===401&&token){token='';localStorage.removeItem('t')}throw new Error(j.error||'Request failed')}return j}
+let tt;const toast=m=>{const t=$('#toast');t.textContent=m;t.className='on';clearTimeout(tt);tt=setTimeout(()=>t.className='',2600)};
+const stars=r=>'<span class=star>'+'★'.repeat(Math.round(r))+'☆'.repeat(5-Math.round(r))+'</span>';
+const go=h=>{location.hash=h};const act=fn=>async(...a)=>{try{await fn(...a)}catch(e){toast(e.message)}};
+async function loadMe(){me=null;cartN=0;if(token){try{const r=await api('/me');me=r.user;cartN=r.cartCount}catch{}}
+ $('#nav').innerHTML=(me?.role==='customer'?`<a href="#/cart">🛒 Cart${cartN?' ('+cartN+')':''}</a><a href="#/orders">Orders</a>`:'')+(me?.role==='vendor'?'<a href="#/vendor">Vendor hub</a><a href="#/orders">Orders</a>':'')+(me?.role==='admin'?'<a href="#/admin">Admin</a>':'')+
+ (me?`<span class=mut>${esc(me.name)}</span><button id=out>Log out</button>`:'<a href="#/login">Log in</a>');if($('#out'))$('#out').onclick=()=>{token='';localStorage.removeItem('t');loadMe().then(()=>go('#/'))}}
+$('#q').onkeydown=e=>{if(e.key==='Enter'){F={...F,q:e.target.value,page:1};go('#/')}};
+
+async function home(){const[c,l]=await Promise.all([api('/categories'),api('/products?'+new URLSearchParams(Object.entries(F).filter(([,v])=>v)))]);
+ $('#app').innerHTML=`<div class=layout><aside class=stack><div class=card><h2>Category</h2><span class="chip ${F.category?'':'on'}" data-c="">All</span>${c.map(x=>`<span class="chip ${F.category===x.name?'on':''}" data-c="${esc(x.name)}">${esc(x.name)} (${x.count})</span>`).join('')}</div>
+ <div class=card><h2>Sort</h2><select id=sort style="width:100%">${[['','Newest'],['low','Price: low to high'],['high','Price: high to low'],['rating','Top rated']].map(([v,t])=>`<option value="${v}" ${F.sort===v?'selected':''}>${t}</option>`).join('')}</select>
+ <h2 style="margin-top:14px">Price ($)</h2><div class=row><input id=min type=number placeholder=Min style="width:80px" value="${esc(F.min||'')}"><input id=max type=number placeholder=Max style="width:80px" value="${esc(F.max||'')}"></div></div></aside>
+ <section><div class=row style="margin-bottom:12px"><h1 style="margin:0">${F.q?'Results for “'+esc(F.q)+'”':'Discover'}</h1><span class="mut sp">${l.total} products</span></div>
+ <div class=grid>${l.items.map(p=>`<a class="card p" href="#/p/${p.id}"><div class=img>${esc(p.emoji)}</div><b>${esc(p.title)}</b><span class=mut>${esc(p.vendor)}</span><div>${stars(p.rating)} <span class=mut>(${p.reviews})</span></div><div class=price>${money(p.price)}</div>${p.stock<=5?`<span class="badge b-shipped">Only ${p.stock} left</span>`:''}</a>`).join('')||'<p class=mut>No products match.</p>'}</div>
+ <div class=row style="justify-content:center;margin-top:16px"><button id=prev ${l.page<=1?'disabled':''}>‹ Prev</button><span class=mut>Page ${l.page} / ${l.pages}</span><button id=next ${l.page>=l.pages?'disabled':''}>Next ›</button></div></section></div>`;
+ document.querySelectorAll('[data-c]').forEach(e=>e.onclick=()=>{F={...F,category:e.dataset.c,page:1};home()});
+ $('#sort').onchange=e=>{F={...F,sort:e.target.value,page:1};home()};$('#min').onchange=$('#max').onchange=()=>{F={...F,min:$('#min').value,max:$('#max').value,page:1};home()};
+ $('#prev').onclick=()=>{F.page--;home()};$('#next').onclick=()=>{F.page++;home()}}
+
+async function product(id){const p=await api('/products/'+id);
+ $('#app').innerHTML=`<div class=two><div class="card img" style="height:340px;font-size:140px">${esc(p.emoji)}</div><div class=stack><div><span class=mut>${esc(p.category)} · sold by ${esc(p.vendor)}</span><h1>${esc(p.title)}</h1>${stars(p.rating)} <span class=mut>${p.rating} (${p.reviews} reviews)</span></div>
+ <div class=price style="font-size:30px">${money(p.price)}</div><p>${esc(p.description)}</p><span class="badge ${p.stock>5?'b-approved':'b-shipped'}">${p.stock>0?p.stock+' in stock':'Out of stock'}</span>
+ <div class=row><select id=qty>${Array.from({length:Math.min(10,p.stock)},(_,i)=>`<option>${i+1}</option>`).join('')}</select><button class=pri id=add ${p.stock?'':'disabled'}>Add to cart</button></div></div></div>
+ <div class=card style="margin-top:18px"><h2>Reviews</h2>${p.canReview?`<div class=row style="margin-bottom:12px"><select id=rt>${[5,4,3,2,1].map(n=>`<option>${n}</option>`).join('')}</select><input id=rc placeholder="Share your experience" style="flex:1"><button id=rs>Post review</button></div>`:''}
+ ${p.reviewList.map(r=>`<div style="padding:8px 0;border-top:1px solid var(--line)">${stars(r.rating)} <b>${esc(r.user)}</b><div>${esc(r.comment)}</div></div>`).join('')||'<p class=mut>No reviews yet. Only verified buyers can review.</p>'}</div>`;
+ $('#add').onclick=act(async()=>{if(!me)return go('#/login');if(me.role!=='customer')throw new Error('Log in as a customer to shop');await api('/cart',{method:'PUT',body:{productId:id,qty:+$('#qty').value}});await loadMe();toast('Added to cart')});
+ if($('#rs'))$('#rs').onclick=act(async()=>{await api(`/products/${id}/reviews`,{method:'POST',body:{rating:+$('#rt').value,comment:$('#rc').value||'Great'}});product(id)})}
+
+async function cart(){if(!me)return go('#/login');const c=await api('/cart'),key=crypto.randomUUID();
+ $('#app').innerHTML=`<h1>Your cart</h1>${c.items.length?`<div class=two><div class=card><table>${c.items.map(i=>`<tr><td>${esc(i.emoji)} <a href="#/p/${i.id}"><b>${esc(i.title)}</b></a><div class=mut>${esc(i.vendor)}</div></td><td><input type=number min=0 max=${Math.min(20,i.stock)} value=${i.qty} data-id="${i.id}" style="width:70px"></td><td>${money(i.price*i.qty)}</td></tr>`).join('')}</table></div>
+ <div class="card stack"><div class=row><b>Subtotal</b><span class=sp>${money(c.subtotal)}</span></div><input id=cp placeholder="Coupon (try WELCOME10)"><textarea id=ad rows=3 placeholder="Shipping address"></textarea><button class=pri id=co>Place order</button><span class=mut>Stock is reserved atomically at checkout. Orders are split per vendor.</span></div></div>`:'<p class=mut>Your cart is empty. <a href="#/" style="color:var(--acc)">Keep shopping</a></p>'}`;
+ document.querySelectorAll('input[data-id]').forEach(i=>i.onchange=act(async()=>{await api('/cart',{method:'PUT',body:{productId:i.dataset.id,qty:+i.value}});await loadMe();cart()}));
+ if($('#co'))$('#co').onclick=act(async()=>{$('#co').disabled=true;try{const o=await api('/checkout',{method:'POST',body:{address:$('#ad').value,coupon:$('#cp').value,idempotencyKey:key}});toast('Order placed: '+money(o.total));await loadMe();go('#/orders')}finally{if($('#co'))$('#co').disabled=false}})}
+
+async function orders(){if(!me)return go('#/login');const l=await api('/orders');
+ $('#app').innerHTML=`<h1>${me.role==='customer'?'My orders':'Orders'}</h1><div class=stack>${l.map(o=>`<div class=card><div class=row><b>#${o.id}</b><span class="badge b-${o.status}">${o.status}</span><span class=mut>${new Date(o.createdAt).toLocaleString()}${o.customer?' · '+esc(o.customer):''}</span><span class=sp><b>${money(o.items.reduce((a,i)=>a+i.net,0))}</b></span></div>
+ <table>${o.items.map(i=>`<tr><td>${esc(i.emoji)} ${esc(i.title)} × ${i.qty}</td><td><span class="badge b-${i.status}">${i.status}</span></td><td>${money(i.net)}</td></tr>`).join('')}</table>
+ ${o.coupon?`<div class=mut>Coupon ${esc(o.coupon)} saved ${money(o.discount)}</div>`:''}<div class=row style="margin-top:8px">${me.role==='customer'&&o.items.every(i=>['placed','cancelled'].includes(i.status))&&o.status!=='cancelled'?`<button class=danger data-cancel="${o.id}">Cancel order</button>`:''}
+ ${me.role==='vendor'&&o.items.some(i=>['placed','shipped'].includes(i.status))?`<button class=pri data-adv="${o.id}">${o.items.some(i=>i.status==='shipped')?'Mark delivered':'Mark shipped'}</button>`:''}</div></div>`).join('')||'<p class=mut>No orders yet.</p>'}</div>`;
+ document.querySelectorAll('[data-cancel]').forEach(b=>b.onclick=act(async()=>{await api(`/orders/${b.dataset.cancel}/cancel`,{method:'POST'});toast('Order cancelled');orders()}));
+ document.querySelectorAll('[data-adv]').forEach(b=>b.onclick=act(async()=>{await api(`/orders/${b.dataset.adv}/advance`,{method:'POST'});orders()}))}
+
+function login(){$('#app').innerHTML=`<div class=two><div class="card stack"><h2>Log in</h2><input id=le placeholder=Email><input id=lp type=password placeholder=Password><button class=pri id=li>Log in</button>
+ <span class=mut>Demo: admin@shop.test / admin123! · aria@shop.test / vendor123!</span></div><div class="card stack"><h2>Create account</h2><input id=rn placeholder="Your name"><input id=re placeholder=Email><input id=rp type=password placeholder="Password (8+ chars)">
+ <select id=rr><option value=customer>I want to shop</option><option value=vendor>I want to sell</option></select><input id=rs placeholder="Shop name (vendors)" style="display:none"><button class=pri id=rg>Sign up</button></div></div>`;
+ const done=r=>{token=r.token;localStorage.t=token;loadMe().then(()=>go(r.user.role==='vendor'?'#/vendor':r.user.role==='admin'?'#/admin':'#/'))};
+ $('#rr').onchange=e=>$('#rs').style.display=e.target.value==='vendor'?'':'none';
+ $('#li').onclick=act(async()=>done(await api('/auth/login',{method:'POST',body:{email:$('#le').value,password:$('#lp').value}})));
+ $('#rg').onclick=act(async()=>done(await api('/auth/register',{method:'POST',body:{name:$('#rn').value,email:$('#re').value,password:$('#rp').value,role:$('#rr').value,shop:$('#rs').value}})))}
+
+async function vendor(){if(me?.role!=='vendor')return go('#/login');const d=await api('/vendor/dashboard');
+ $('#app').innerHTML=`<div class=row><h1>${esc(d.shop)}</h1><span class="badge b-${d.status}">${d.status}</span></div>${d.status!=='approved'?'<p class=mut>Your shop is awaiting admin approval before you can list products.</p>':''}
+ <div class=stats>${[['Units sold',d.units],['Gross sales',money(d.gross)],['Commission (10%)',money(d.commission)],['Net earnings',money(d.net)],['Pending payout',money(d.pendingPayout)],['Available payout',money(d.availablePayout)]].map(([k,v])=>`<div class="card stat"><span class=mut>${k}</span><b>${v}</b></div>`).join('')}</div>
+ ${d.lowStock.length?`<p class=danger>Low stock: ${d.lowStock.map(esc).join(', ')}</p>`:''}
+ <div class=two><div class="card stack"><h2>Add product</h2><input id=nt placeholder=Title><input id=nc placeholder="Category (e.g. Home)"><div class=row><input id=np type=number step=0.01 placeholder="Price $" style="width:110px"><input id=ns type=number placeholder=Stock style="width:90px"><input id=ne placeholder="Emoji" value="📦" style="width:70px"></div><textarea id=nd rows=3 placeholder=Description></textarea><button class=pri id=na>Publish product</button></div>
+ <div class=card><h2>Your products</h2><table>${d.products.map(p=>`<tr><td>${esc(p.emoji)} ${esc(p.title)}</td><td><input type=number min=0 value=${p.stock} data-s="${p.id}" style="width:70px"></td><td>${money(p.price)}</td><td><button class=danger data-del="${p.id}">Archive</button></td></tr>`).join('')||'<tr><td class=mut>No products yet</td></tr>'}</table></div></div>`;
+ $('#na').onclick=act(async()=>{await api('/products',{method:'POST',body:{title:$('#nt').value,category:$('#nc').value,price:$('#np').value,stock:$('#ns').value,emoji:$('#ne').value,description:$('#nd').value}});toast('Product published');vendor()});
+ document.querySelectorAll('[data-s]').forEach(i=>i.onchange=act(async()=>{await api('/products/'+i.dataset.s,{method:'PUT',body:{stock:+i.value}});toast('Stock updated')}));
+ document.querySelectorAll('[data-del]').forEach(b=>b.onclick=act(async()=>{await api('/products/'+b.dataset.del,{method:'DELETE'});vendor()}))}
+
+async function admin(){if(me?.role!=='admin')return go('#/login');const d=await api('/admin/overview');
+ $('#app').innerHTML=`<h1>Admin</h1><div class=stats>${[['GMV',money(d.gmv)],['Platform commission',money(d.commission)],['Orders',d.orders],['Customers',d.customers]].map(([k,v])=>`<div class="card stat"><span class=mut>${k}</span><b>${v}</b></div>`).join('')}</div>
+ <div class=card><h2>Vendors</h2><table><tr><th>Shop</th><th>Owner</th><th>Products</th><th>Status</th><th></th></tr>${d.vendors.map(v=>`<tr><td><b>${esc(v.shop)}</b></td><td>${esc(v.email)}</td><td>${v.products}</td><td><span class="badge b-${v.status}">${v.status}</span></td>
+ <td>${v.status!=='approved'?`<button class=pri data-a="approve:${v.id}">Approve</button>`:`<button class=danger data-a="suspend:${v.id}">Suspend</button>`}</td></tr>`).join('')}</table></div>
+ <div class=card style="margin-top:14px"><h2>Coupons</h2>${d.coupons.map(c=>`<span class=chip>${esc(c.code)} · ${c.type==='percent'?c.value+'%':money(c.value)} · ${c.left} left</span>`).join('')}</div>`;
+ document.querySelectorAll('[data-a]').forEach(b=>b.onclick=act(async()=>{const[a,id]=b.dataset.a.split(':');await api(`/admin/vendors/${id}/${a}`,{method:'POST'});admin()}))}
+
+async function route(){const[,r,a]=location.hash.slice(1).split('/');const m={'':home,p:()=>product(a),cart,orders,login,vendor,admin};scrollTo(0,0);
+ try{await (m[r||'']||home)()}catch(e){$('#app').innerHTML=`<p class=danger>${esc(e.message)}</p>`}}
+addEventListener('hashchange',route);loadMe().then(route);
+</script>
