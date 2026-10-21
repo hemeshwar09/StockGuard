@@ -1,9 +1,0 @@
-.git
-.venv
-__pycache__
-*.pyc
-.env
-tests
-scripts
-.github
-results*.json
