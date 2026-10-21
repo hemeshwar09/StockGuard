@@ -113,7 +113,7 @@ What's covered: 100 concurrent buyers vs 20 units for each strategy (exactly 20 
 python scripts/loadtest.py --stock 100 --buyers 500 --concurrency 100 --output results-atomic.json
 ```
 
-Each buyer runs reserve, then order, then pay; ~10% of order/pay calls are fired twice at once with the same `Idempotency-Key`. Afterwards the script calls `/audit` and checks:
+Each buyer runs reserve, then order, then pay; 10% of order/pay calls (configurable with `--duplicate-rate`) are fired twice at once with the same `Idempotency-Key`. Afterwards the script calls `/audit` and checks:
 
 * no oversell, and books consistent
 * units paid for == stock decrease, and never more than the initial stock
@@ -129,36 +129,14 @@ INVENTORY_STRATEGY=naive docker compose up -d --force-recreate api   # expect FA
 python scripts/loadtest.py --output results-naive.json
 ```
 
-Record **your own measured numbers** here (machine, Postgres version, params), then use them in your resume bullets:
+The script prints a summary and exits non-zero if any invariant fails. `--output` saves a JSON report; `python scripts/report.py results-*.json --env "<your setup>"` turns saved reports into a markdown table.
 
-| Strategy | Throughput (req/s) | reserve p95 (ms) | pay p95 (ms) | Oversold? |
-|---|---|---|---|---|
-| atomic | | | | |
-| pessimistic | | | | |
-| optimistic | | | | |
-| naive | | | | |
-
-## Deploy
-
-### Option A: Render (fastest)
-
-1. Push this repo to GitHub.
-2. Render dashboard: **New, Blueprint**, select the repo. `render.yaml` provisions the web service and a Postgres database and wires `DATABASE_URL`; `ADMIN_API_KEY` is generated for you (read it in the service's Environment tab).
-3. When live, open `https://<your-service>.onrender.com/docs`, and point the load test at it:
-   `python scripts/loadtest.py --base-url https://<your-service>.onrender.com --admin-key <key>`
-
-Free-tier notes: instances sleep when idle (first request is slow) and free Postgres databases expire; check Render's current terms and upgrade the plan if you need it to stay up for recruiters.
-
-### Option B: AWS
-
-The image is a standard container that reads `PORT` and `DATABASE_URL`. For example: push to **ECR**, run on **ECS Fargate** (or App Runner) behind an ALB with `/health` as the target health check, use **RDS PostgreSQL**, and store `ADMIN_API_KEY` / `DATABASE_URL` in **Secrets Manager** or SSM Parameter Store.
-
-### Production checklist
+## Production notes
 
 * Set a strong `ADMIN_API_KEY`; replace header-based user auth with real JWT/OIDC.
 * Keep `INVENTORY_STRATEGY=atomic` (never `naive`).
 * Introduce Alembic migrations and set `CREATE_TABLES_ON_STARTUP=false` (tables are auto-created for convenience).
-* Put TLS in front (the platform/ALB does this), and consider rate limiting at the edge.
+* Put TLS in front (your hosting platform or a reverse proxy), and consider rate limiting at the edge.
 
 ## Configuration
 
